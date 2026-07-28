@@ -1,0 +1,102 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  POLICE
+  OWNER
+}
+
+enum LocationType {
+  SHOP
+  HOME
+}
+
+enum AlertStatus {
+  PENDING
+  RESPONDING
+  RESOLVED
+  FALSE_ALARM
+}
+
+enum DeviceStatus {
+  ONLINE
+  OFFLINE
+}
+
+model User {
+  id        String   @id @default(cuid())
+  fullName  String
+  email     String   @unique
+  phone     String
+  password  String
+  role      Role     @default(OWNER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  locations Location[]
+
+  @@map("users")
+}
+
+model Location {
+  id            String       @id @default(cuid())
+  name          String
+  address       String
+  type          LocationType
+  policeStation String
+  latitude      String?
+  longitude     String?
+  pairingCode   String       @unique
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  ownerId String
+  owner   User   @relation(fields: [ownerId], references: [id])
+
+  device Device?
+  alerts Alert[]
+
+  @@map("locations")
+}
+
+model Device {
+  id        String       @id @default(cuid())
+  deviceId  String       @unique
+  status    DeviceStatus @default(OFFLINE)
+  lastSeen  DateTime?
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  locationId String   @unique
+  location   Location @relation(fields: [locationId], references: [id])
+
+  alerts Alert[]
+
+  @@map("devices")
+}
+
+model Alert {
+  id          String      @id @default(cuid())
+  status      AlertStatus @default(PENDING)
+  triggeredAt DateTime    @default(now())
+  respondedAt DateTime?
+  resolvedAt  DateTime?
+  notes       String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  deviceId   String
+  device     Device   @relation(fields: [deviceId], references: [id])
+
+  locationId String
+  location   Location @relation(fields: [locationId], references: [id])
+
+  @@map("alerts")
+}
