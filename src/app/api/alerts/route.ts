@@ -145,3 +145,101 @@ export async function POST(req: NextRequest) {
     )
   }
 }
+
+export async function PUT(req: NextRequest) {
+  try {
+    const { user, error } = requireAuth(req, ['ADMIN', 'POLICE'])
+    if (error || !user) {
+      return NextResponse.json<ApiResponse<null>>(
+        { success: false, error: error || 'Unauthorized' },
+        { status: 401, headers: corsHeaders }
+      )
+    }
+
+    const body = await req.json()
+    const { alertId, status, notes } = body
+
+    if (!alertId || !status) {
+      return NextResponse.json<ApiResponse<null>>(
+        { success: false, error: 'Alert ID and status are required' },
+        { status: 400, headers: corsHeaders }
+      )
+    }
+
+    const alert = await prisma.alert.findUnique({
+      where: { id: alertId },
+      include: { device: true },
+    })
+
+    if (!alert) {
+      return NextResponse.json<ApiResponse<null>>(
+        { success: false, error: 'Alert not found' },
+        { status: 404, headers: corsHeaders }
+      )
+    }
+
+    const updatedAlert = await prisma.alert.update({
+      where: { id: alertId },
+      data: {
+        status,
+        notes,
+        respondedAt: status === 'RESPONDING' ? new Date() : alert.respondedAt,
+        resolvedAt: status === 'RESOLVED' || status === 'FALSE_ALARM' ? new Date() : alert.resolvedAt,
+      },
+      include: {
+        device: true,
+        location: {
+          include: { owner: true },
+        },
+      },
+    })
+
+    return NextResponse.json<ApiResponse<Alert>>(
+      { success: true, data: updatedAlert as unknown as Alert },
+      { status: 200, headers: corsHeaders }
+    )
+  } catch (error) {
+    console.error('Update alert error:', error)
+    return NextResponse.json<ApiResponse<null>>(
+      { success: false, error: 'Internal server error' },
+      { status: 500, headers: corsHeaders }
+    )
+  }
+}
+
+export async function DELETE(req: NextRequest) {
+  try {
+    const { user, error } = requireAuth(req, ['ADMIN'])
+    if (error || !user) {
+      return NextResponse.json<ApiResponse<null>>(
+        { success: false, error: error || 'Unauthorized' },
+        { status: 401, headers: corsHeaders }
+      )
+    }
+
+    const { searchParams } = new URL(req.url)
+    const alertId = searchParams.get('id')
+
+    if (!alertId) {
+      return NextResponse.json<ApiResponse<null>>(
+        { success: false, error: 'Alert ID is required' },
+        { status: 400, headers: corsHeaders }
+      )
+    }
+
+    await prisma.alert.delete({
+      where: { id: alertId },
+    })
+
+    return NextResponse.json<ApiResponse<null>>(
+      { success: true, data: null },
+      { status: 200, headers: corsHeaders }
+    )
+  } catch (error) {
+    console.error('Delete alert error:', error)
+    return NextResponse.json<ApiResponse<null>>(
+      { success: false, error: 'Internal server error' },
+      { status: 500, headers: corsHeaders }
+    )
+  }
+}
