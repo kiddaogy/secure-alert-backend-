@@ -1,23 +1,9 @@
 import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { verifyToken, getTokenFromHeader } from '@/lib/jwt'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(req: NextRequest) {
-  const authHeader = req.headers.get('authorization')
-  const token = getTokenFromHeader(authHeader)
-
-  if (!token) {
-    return new Response('Unauthorized', { status: 401 })
-  }
-
-  try {
-    verifyToken(token)
-  } catch {
-    return new Response('Unauthorized', { status: 401 })
-  }
-
   const encoder = new TextEncoder()
 
   const stream = new ReadableStream({
@@ -62,7 +48,10 @@ export async function GET(req: NextRequest) {
     headers: {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
-      Connection: 'keep-alive',
+      'Connection': 'keep-alive',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     },
   })
 }
