@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { ApiResponse, Alert } from '@/types'
-import { getSocketIO } from '@/lib/socket'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -55,14 +54,6 @@ export async function POST(req: NextRequest) {
         },
       },
     })
-
-    // Emit Socket.IO event for real-time updates
-    const io = getSocketIO(req as any)
-    if (io) {
-      io.to('alerts').emit('new-alert', alert)
-      io.to('admin').emit('new-alert', alert)
-      console.log('Emitted new-alert event for ESP32 triggered alert:', alert.id)
-    }
 
     return NextResponse.json<ApiResponse<Alert>>(
       {
