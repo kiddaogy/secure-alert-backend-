@@ -36,9 +36,6 @@ export async function POST(req: NextRequest) {
         phone,
         password: hashedPassword,
         role: 'OWNER',
-        latitude: latitude || null,
-        longitude: longitude || null,
-        address: address || null,
       },
     })
 
@@ -59,9 +56,6 @@ export async function POST(req: NextRequest) {
             email: user.email,
             phone: user.phone,
             role: user.role,
-            latitude: user.latitude,
-            longitude: user.longitude,
-            address: user.address,
             createdAt: user.createdAt,
             updatedAt: user.updatedAt,
           },
