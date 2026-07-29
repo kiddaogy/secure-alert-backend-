@@ -67,9 +67,9 @@ export async function GET(req: NextRequest) {
   }
 }
 
-export async function POST(req: NextRequest) {
+export async function PUT(req: NextRequest) {
   try {
-    const { user, error } = requireAuth(req, ['OWNER'])
+    const { user, error } = requireAuth(req, ['OWNER', 'ADMIN'])
     if (error || !user) {
       return NextResponse.json<ApiResponse<null>>(
         { success: false, error: error || 'Unauthorized' },
@@ -78,23 +78,36 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json()
-    const { name, address, type, policeStation, latitude, longitude } = body
+    const { locationId, name, address, type, policeStation, latitude, longitude } = body
 
-    if (!name || !address || !type || !policeStation) {
+    if (!locationId || !name || !address || !type || !policeStation) {
       return NextResponse.json<ApiResponse<null>>(
         { success: false, error: 'All fields are required' },
         { status: 400, headers: corsHeaders }
       )
     }
 
-    let pairingCode = generatePairingCode()
-    let exists = await prisma.location.findUnique({ where: { pairingCode } })
-    while (exists) {
-      pairingCode = generatePairingCode()
-      exists = await prisma.location.findUnique({ where: { pairingCode } })
+    // Check if user has permission to edit this location
+    const existingLocation = await prisma.location.findUnique({
+      where: { id: locationId },
+    })
+
+    if (!existingLocation) {
+      return NextResponse.json<ApiResponse<null>>(
+        { success: false, error: 'Location not found' },
+        { status: 404, headers: corsHeaders }
+      )
     }
 
-    const location = await prisma.location.create({
+    if (user.role === 'OWNER' && existingLocation.ownerId !== user.id) {
+      return NextResponse.json<ApiResponse<null>>(
+        { success: false, error: 'You can only edit your own locations' },
+        { status: 403, headers: corsHeaders }
+      )
+    }
+
+    const location = await prisma.location.update({
+      where: { id: locationId },
       data: {
         name,
         address,
@@ -102,8 +115,6 @@ export async function POST(req: NextRequest) {
         policeStation,
         latitude,
         longitude,
-        pairingCode,
-        ownerId: user.id,
       },
       include: {
         device: true,
@@ -115,12 +126,80 @@ export async function POST(req: NextRequest) {
       {
         success: true,
         data: location as unknown as Location,
-        message: 'Location created successfully',
+        message: 'Location updated successfully',
       },
-      { status: 201, headers: corsHeaders }
+      { status: 200, headers: corsHeaders }
     )
   } catch (error) {
-    console.error('Create location error:', error)
+    console.error('Update location error:', error)
+    return NextResponse.json<ApiResponse<null>>(
+      { success: false, error: 'Internal server error' },
+      { status: 500, headers: corsHeaders }
+    )
+  }
+}
+
+export async function DELETE(req: NextRequest) {
+  try {
+    const { user, error } = requireAuth(req, ['OWNER', 'ADMIN'])
+    if (error || !user) {
+      return NextResponse.json<ApiResponse<null>>(
+        { success: false, error: error || 'Unauthorized' },
+        { status: 401, headers: corsHeaders }
+      )
+    }
+
+    const { searchParams } = new URL(req.url)
+    const locationId = searchParams.get('locationId')
+
+    if (!locationId) {
+      return NextResponse.json<ApiResponse<null>>(
+        { success: false, error: 'Location ID is required' },
+        { status: 400, headers: corsHeaders }
+      )
+    }
+
+    // Check if user has permission to delete this location
+    const existingLocation = await prisma.location.findUnique({
+      where: { id: locationId },
+      include: { device: true },
+    })
+
+    if (!existingLocation) {
+      return NextResponse.json<ApiResponse<null>>(
+        { success: false, error: 'Location not found' },
+        { status: 404, headers: corsHeaders }
+      )
+    }
+
+    if (user.role === 'OWNER' && existingLocation.ownerId !== user.id) {
+      return NextResponse.json<ApiResponse<null>>(
+        { success: false, error: 'You can only delete your own locations' },
+        { status: 403, headers: corsHeaders }
+      )
+    }
+
+    // Delete associated device if exists
+    if (existingLocation.device) {
+      await prisma.device.delete({
+        where: { id: existingLocation.device.id },
+      })
+    }
+
+    // Delete the location
+    await prisma.location.delete({
+      where: { id: locationId },
+    })
+
+    return NextResponse.json<ApiResponse<null>>(
+      {
+        success: true,
+        message: 'Location deleted successfully',
+      },
+      { status: 200, headers: corsHeaders }
+    )
+  } catch (error) {
+    console.error('Delete location error:', error)
     return NextResponse.json<ApiResponse<null>>(
       { success: false, error: 'Internal server error' },
       { status: 500, headers: corsHeaders }
